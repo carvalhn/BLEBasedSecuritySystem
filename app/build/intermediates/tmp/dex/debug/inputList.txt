@@ -1,0 +1,2 @@
+C:\Users\User\Downloads\AmbientNotifications-master\Chat\app\build\intermediates\classes\debug
+C:\Users\User\Downloads\AmbientNotifications-master\Chat\app\build\intermediates\pre-dexed\debug\support-v4-19.1.0-3791088a8426f4e871d60d06e92e4846eb38cbc0.jar
