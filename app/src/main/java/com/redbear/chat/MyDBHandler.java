@@ -9,18 +9,20 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.util.Log;
 
+import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 
 public class MyDBHandler extends SQLiteOpenHelper {
 
-    private static final int DATABASE_VERSION = 2;
+    private static final int DATABASE_VERSION = 4;
     private static final String DATABASE_NAME = "Security.db";
     public static final String TABLE_PRODUCTS = "BLESensorValues";
 
-    public static final String COLUMN_ID = "_id";
+    public static final String COLUMN_ID = "id";
     public static final String COLUMN_DEVICENAME = "devicename";
     public static final String COLUMN_SENSORCODE = "sensorcode";
     public static final String COLUMN_TIMESTAMP = "timestamp";
@@ -31,12 +33,12 @@ public class MyDBHandler extends SQLiteOpenHelper {
 
     @Override
     public void onCreate(SQLiteDatabase db) {
-        String CREATE_PRODUCTS_TABLE = "CREATE TABLE " +
+        String CREATE_Sensor_TABLE = "CREATE TABLE " +
                 TABLE_PRODUCTS + "("
                 + COLUMN_ID + " INTEGER PRIMARY KEY AUTOINCREMENT," + COLUMN_DEVICENAME
                 + " TEXT," + COLUMN_SENSORCODE
-                + " TEXT," +COLUMN_TIMESTAMP + " TEXT" + ")";
-        db.execSQL(CREATE_PRODUCTS_TABLE);
+                + " TEXT," +COLUMN_TIMESTAMP + " datetime DEFAULT (datetime('now')) " + ")";
+        db.execSQL(CREATE_Sensor_TABLE);
     }
 
     @Override
@@ -52,7 +54,9 @@ public class MyDBHandler extends SQLiteOpenHelper {
         ContentValues values = new ContentValues();
         values.put(COLUMN_DEVICENAME, sensorValues.get_devicename());
         values.put(COLUMN_SENSORCODE, sensorValues.get_sensorcode());
-        values.put(COLUMN_TIMESTAMP, new Date().toString());
+        SimpleDateFormat dateFormat=new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        Date date=new Date();
+        values.put(COLUMN_TIMESTAMP, dateFormat.format(date));
         SQLiteDatabase db = this.getWritableDatabase();
 
         db.insert(TABLE_PRODUCTS, null, values);
@@ -81,6 +85,43 @@ public class MyDBHandler extends SQLiteOpenHelper {
         return sensorValues;
     }
 
+    public boolean isExists(String devicename) {
+        String query = "Select max(timestamp) FROM " + TABLE_PRODUCTS + " WHERE " + COLUMN_DEVICENAME + " =  \"" + devicename + "\"";
+
+        SQLiteDatabase db = this.getWritableDatabase();
+
+        Cursor cursor = db.rawQuery(query, null);
+        boolean doesExist=false;
+        if (cursor!=null&&cursor.moveToFirst()) {
+
+            SimpleDateFormat dateFormat=new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            Date nowDate=new Date();
+            try {
+                Log.e("Chat", "here" + "A");
+                if(cursor.getString(0)!=null) {
+                    Date databaseDate = dateFormat.parse(cursor.getString(0));
+                    Log.e("Chat", "here" + "B");
+                    long millis = (nowDate.getTime() - databaseDate.getTime());
+                    Log.e("Chat", "here" + "C");
+                    if (((int) ((millis / (1000 * 60)) % 60)) <= 5) {
+                        Log.e("Chat", "here" + databaseDate.toString());
+                        doesExist = true;
+                    }
+                }
+            }
+            catch(Exception e)
+            {
+                Log.e("Chat","caught exception timestamp233",e);
+            }
+
+        }
+        cursor.close();
+        db.close();
+        return doesExist;
+    }
+
+
+
     public List<BLESensorValues> getAllSensorValues(String devicename) {
         List<BLESensorValues> allSensorValues = new LinkedList<BLESensorValues>();
 
@@ -99,7 +140,15 @@ public class MyDBHandler extends SQLiteOpenHelper {
                 sensorValues.set_id(Integer.parseInt(cursor.getString(0)));
                 sensorValues.set_devicename(cursor.getString(1));
                 sensorValues.set_sensorcode(cursor.getString(2));
-                sensorValues.set_timestamp(new Date(cursor.getString(3)));
+                SimpleDateFormat dateFormat=new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+                Date date=new Date();
+                try {
+                    sensorValues.set_timestamp(dateFormat.parse(cursor.getString(3)));
+                }
+                catch(Exception e)
+                {
+                   Log.e("Chat","caught exception timestamp"+e);
+                }
                 // Add book to books
                 allSensorValues.add(sensorValues);
             } while (cursor.moveToNext());

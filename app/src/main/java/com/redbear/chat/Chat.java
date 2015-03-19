@@ -68,18 +68,25 @@ public class Chat extends Activity {
 					.equals(action)) {
 				getGattService(mBluetoothLeService.getSupportedGattService());
 			} else if (RBLService.ACTION_DATA_AVAILABLE.equals(action)) {
-				displayData(intent.getByteArrayExtra(RBLService.EXTRA_DATA));
+
                 MyDBHandler db = new MyDBHandler(getApplicationContext());
                 try {
-                    db.addBLESensorValue(new BLESensorValues("neil", new String(intent.getByteArrayExtra(RBLService.EXTRA_DATA))));
-                    List<BLESensorValues> list = db.getAllSensorValues("neil");
-                    for(int i=0;i<list.size();i++){
-                        Log.e(TAG, "id:"+i+"list value: "+list.toString());
+                    String sensorCode =new String(intent.getByteArrayExtra(RBLService.EXTRA_DATA));
+                    if(sensorCode!=null&&sensorCode.length()==10) {
+                        if(!db.isExists("neil")) {
+                            db.addBLESensorValue(new BLESensorValues("neil", new String(intent.getByteArrayExtra(RBLService.EXTRA_DATA))));
+                            displayData(intent.getByteArrayExtra(RBLService.EXTRA_DATA));
+                        }
+                            List<BLESensorValues> list = db.getAllSensorValues("neil");
+
+                        for (int i = 0; i < list.size(); i++) {
+                            Log.e(TAG, "id:" + i + "list value: " + list.toString());
+                        }
                     }
 
                 }
                 catch(Exception e){
-                    Log.e(TAG, e.getMessage());
+                    Log.e(TAG, "Inside main exception"+e.getMessage());
                 }
 
             }
