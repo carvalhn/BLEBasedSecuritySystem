@@ -12,6 +12,7 @@ import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.text.method.ScrollingMovementMethod;
+import android.util.Base64;
 import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
@@ -20,10 +21,19 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 
+import java.security.NoSuchAlgorithmException;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.KeySpec;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import javax.crypto.Cipher;
+import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.SecretKeySpec;
 
 public class Chat extends Activity {
 	private final static String TAG = Chat.class.getSimpleName();
@@ -34,6 +44,8 @@ public class Chat extends Activity {
 	private String mDeviceName;
 	private String mDeviceAddress;
 	private RBLService mBluetoothLeService;
+    private static String completeSensorCode=null;
+    private static int extendedCode=0;
 	private Map<UUID, BluetoothGattCharacteristic> map = new HashMap<UUID, BluetoothGattCharacteristic>();
 
 	private final ServiceConnection mServiceConnection = new ServiceConnection() {
@@ -49,7 +61,9 @@ public class Chat extends Activity {
 			}
 			// Automatically connects to the device upon successful start-up
 			// initialization.
-			mBluetoothLeService.connect(mDeviceAddress);
+            if(mDeviceAddress.equalsIgnoreCase("Neil Nodes")) {
+                mBluetoothLeService.connect(mDeviceAddress);
+            }
 		}
 
 		@Override
@@ -72,11 +86,28 @@ public class Chat extends Activity {
                 MyDBHandler db = new MyDBHandler(getApplicationContext());
                 try {
                     String sensorCode =new String(intent.getByteArrayExtra(RBLService.EXTRA_DATA));
-                    if(sensorCode!=null&&sensorCode.length()==10) {
-                        if(!db.isExists("neil")) {
-                            db.addBLESensorValue(new BLESensorValues("neil", new String(intent.getByteArrayExtra(RBLService.EXTRA_DATA))));
-                            displayData(intent.getByteArrayExtra(RBLService.EXTRA_DATA));
+                   // String encryptedString = encryptString("AES/ECB/PKCS5padding", "123", "987654321", "567");
+                    Log.e(TAG, "sensorCode" + sensorCode +" length:"+sensorCode.length());
+                    if(sensorCode!=null&&(sensorCode.length()==20||sensorCode.length()==4)) {
+                        if(sensorCode.length()==20) {
+                            completeSensorCode = sensorCode;
+                            extendedCode=1;
                         }
+                        else if (sensorCode.length()==4 && extendedCode==1 && sensorCode.charAt(3)=='='){
+                            completeSensorCode=completeSensorCode+sensorCode;
+                            String decryptedString = decryptString("AES/ECB/PKCS5padding", "123", completeSensorCode, "567");
+                            if(!db.isExists("neil")) {
+                                db.addBLESensorValue(new BLESensorValues("neil", new String(decryptedString)));
+                                displayData(decryptedString.getBytes());
+                                Log.e(TAG, "CompleteSensorCode" + completeSensorCode+"actual decrypted code"+decryptedString);
+                            }
+                            completeSensorCode=null;
+                        }
+                        else if(extendedCode==1){
+                            extendedCode=0;
+                        }
+                        //if(!db.isExists("neil")) {
+                        //}
                             List<BLESensorValues> list = db.getAllSensorValues("neil");
 
                         for (int i = 0; i < list.size(); i++) {
@@ -173,6 +204,66 @@ public class Chat extends Activity {
 		System.exit(0);
 	}
 
+
+    // decryption method
+    public static String decryptString(String cypher, String key, String textToDecrypt, String salt) {
+        byte[] rawKey = new byte[32];
+        java.util.Arrays.fill(rawKey, (byte) 0);
+        byte[] keyOk = hmacSha1(salt, key);
+        for (int i = 0; i < keyOk.length; i++) {
+            rawKey[i] = keyOk[i];
+        }
+        SecretKeySpec skeySpec = new SecretKeySpec(hmacSha1(salt, key), "AES");
+        try {
+            Cipher cipher = Cipher.getInstance(cypher);
+            cipher.init(Cipher.DECRYPT_MODE, skeySpec);
+            byte[] encryptedData = cipher.doFinal(Base64.decode(textToDecrypt, Base64.NO_CLOSE));
+            if (encryptedData == null) return null;
+            return new String(encryptedData);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+    // encryption method
+    public static String encryptString(String cypher, String key, String clearText, String salt) {
+        byte[] rawKey = new byte[32];
+        java.util.Arrays.fill(rawKey, (byte) 0);
+        byte[] keyOk = hmacSha1(salt, key);
+        for (int i = 0; i < keyOk.length; i++) {
+            rawKey[i] = keyOk[i];
+        }
+        SecretKeySpec skeySpec = new SecretKeySpec(hmacSha1(salt, key), "AES");
+        try {
+            Cipher cipher = Cipher.getInstance(cypher);
+            cipher.init(Cipher.ENCRYPT_MODE, skeySpec);
+            byte[] encryptedData = cipher.doFinal(clearText.getBytes());
+            if (encryptedData == null) return null;
+            return Base64.encodeToString(encryptedData, Base64.NO_CLOSE);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+    // key generator method
+    public static byte[] hmacSha1(String salt, String key) {
+        SecretKeyFactory factory = null;
+        SecretKey keyByte = null;
+        try {
+            //PBKDF2WithHmacSHA1
+            factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
+            KeySpec keyspec = new PBEKeySpec(key.toCharArray(), salt.getBytes(), 512, 256);
+            keyByte = factory.generateSecret(keyspec);
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        } catch (InvalidKeySpecException e) {
+            e.printStackTrace();
+        }
+        return keyByte.getEncoded();
+    }
+    public static void main(String args[]){
+
+    }
 	private void displayData(byte[] byteArray) {
 		if (byteArray != null) {
 			String data = new String(byteArray);
